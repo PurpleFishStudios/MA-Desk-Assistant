@@ -46,7 +46,7 @@ final class HomeCaseConversation {
             if let currentID, let item = available.first(where: { $0.persistentModelID == currentID }) {
                 return resume(item, alreadyOpen: true)
             }
-            return "No practice case is open. Tell me part of the title, or say “list cases”. I did not open a note."
+            return "Nothing is open yet. Give me part of the title when you are ready. I did not open a note."
         }
         let matches = available.filter {
             HomeTurnRouter.matchesCase(tokens: tokens, title: $0.title, identifier: $0.identifier)
@@ -54,7 +54,7 @@ final class HomeCaseConversation {
         if matches.isEmpty {
             pendingIDs = []
             pendingSection = nil
-            return "I could not find a saved case for “\(hint)”. I left the open case as it is. Try the title or identifier, or say “list cases”."
+            return "I don't see a saved case for “\(hint)”. I left things as they were. A bit of the title, or the identifier, will get us there."
         }
         if matches.count == 1 {
             return resume(matches[0], alreadyOpen: matches[0].persistentModelID == currentID)
@@ -179,21 +179,21 @@ final class HomeCaseConversation {
         pendingSection = nil
         let label = "\(value(item.title)) · \(value(item.identifier))"
         if alreadyOpen {
-            return "We are already on “\(label)”. I did not change the note."
+            return "We are still on “\(label)”. I left the note as it is."
         }
-        return "Back on “\(label)”. I did not change the note. Ask what is missing, or tell me what to add."
+        return "I've brought up “\(label)”. The note is unchanged. We can look at what is missing, or you can tell me what to add."
     }
 
     private func choose(from items: [PracticeCase], section: Section?) -> String {
         pendingIDs = items.map(\.persistentModelID)
         pendingSection = section
         guard !items.isEmpty else {
-            return "No matching owned fictional cases are available in this profile."
+            return "I don't see a matching case on this profile."
         }
         let list = items.enumerated().map { index, item in
             "\(index + 1). \(value(item.title)) · \(value(item.identifier))"
         }.joined(separator: "\n")
-        return "Which fictional case do you mean?\n\n\(list)\n\nReply with its number, saved title, or identifier."
+        return "A few cases could match. Which one did you mean?\n\n\(list)\n\nThe number, the title, or the identifier is enough."
     }
 
     private func select(_ item: PracticeCase, section: Section?) -> String {
@@ -202,7 +202,7 @@ final class HomeCaseConversation {
         pendingIDs = []
         pendingSection = nil
         guard let section else {
-            return "Current case: \(currentTitle ?? "")\n\nAsk ‘What did I write in the HPI?’, ‘What was the plan?’, or ‘Show the saved SOAP text’."
+            return "I've got “\(currentTitle ?? "")”. The note is unchanged. You can ask what you wrote in the HPI, or what the plan says."
         }
         let heading: String
         let text: String

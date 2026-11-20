@@ -79,7 +79,7 @@ final class AssistantViewModel {
 
     var characterState: CharacterState = .idle
     var commandText = ""
-    var responseText = "Ready when you are. Ask a question, follow up on the last reply, or type “help”."
+    var responseText = "I'm here. The note stays as it is until you ask me to change it."
     var isQuietMode = false
     var isSleeping = false
     var tasks: [DeskTask] = []
@@ -127,7 +127,7 @@ final class AssistantViewModel {
             .lowercased()
 
         guard !command.isEmpty else {
-            responseText = "Type a command first, or type “help”."
+            responseText = "Tell me what you need, or say “help”."
             characterState = .alert
             return
         }
@@ -135,7 +135,7 @@ final class AssistantViewModel {
         if isSleeping &&
             !command.contains("wake up") &&
             !command.contains("wake") {
-            responseText = "I am in sleep mode. Type “wake up” to continue."
+            responseText = "I'm resting. Say “wake up” when you want me."
             characterState = .sleeping
             return
         }
@@ -217,8 +217,8 @@ final class AssistantViewModel {
             onUnrecognized()
         } else {
             responseText = """
-            I don’t recognize that command.
-            Type “help” to view all available commands.
+            I'm not sure what you'd like me to do.
+            Say “help” and I'll show you the way.
             """
             characterState = .idle
         }
@@ -432,7 +432,7 @@ final class AssistantViewModel {
     func tellTime() {
         let formatter = DateFormatter()
         formatter.timeStyle = .short
-        responseText = "It is \(formatter.string(from: Date()))."
+        responseText = "It's \(formatter.string(from: Date()))."
         characterState = .happy
     }
 
@@ -456,7 +456,7 @@ final class AssistantViewModel {
         isSleeping = true
         isQuietMode = true
         saveSettings()
-        responseText = "Sleep mode enabled. Type “wake up” when you need me."
+        responseText = "I'll rest. Say “wake up” when you want me."
         characterState = .sleeping
     }
 
@@ -464,7 +464,7 @@ final class AssistantViewModel {
         isSleeping = false
         isQuietMode = false
         saveSettings()
-        responseText = "I am awake and ready."
+        responseText = "I'm here."
         characterState = .happy
     }
 
@@ -560,7 +560,7 @@ final class AssistantViewModel {
         timer?.invalidate()
         timerRemaining = minutes * 60
         isTimerRunning = true
-        responseText = "Timer started for \(minutes) minute\(minutes == 1 ? "" : "s")."
+        responseText = "Timer set for \(minutes) minute\(minutes == 1 ? "" : "s"). I'll let you know."
         characterState = .happy
 
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] activeTimer in
@@ -573,7 +573,7 @@ final class AssistantViewModel {
             } else {
                 activeTimer.invalidate()
                 self.isTimerRunning = false
-                self.responseText = "Your timer is complete."
+                self.responseText = "The timer is finished."
                 self.characterState = .alert
             }
         }
@@ -584,7 +584,7 @@ final class AssistantViewModel {
         timer = nil
         timerRemaining = 0
         isTimerRunning = false
-        responseText = "Timer cancelled."
+        responseText = "Timer cancelled. I'm still here."
         characterState = .idle
     }
 
@@ -798,6 +798,7 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             background
+            VStack(spacing: 0) {
             ScrollView(.vertical) {
                 VStack(spacing: 22) {
                     header
@@ -808,9 +809,9 @@ struct ContentView: View {
                     ) {
                         assistant.characterState = .listening
                         if let title = caseConversation.currentTitle {
-                            assistant.responseText = "I'm looking at you. The open practice case is \(title). Say what to add, or ask a code question. A question does not change the note."
+                            assistant.responseText = "I'm with you. The open note is \(title). Ask what's missing, or tell me what to add. I won't change it unless you ask."
                         } else {
-                            assistant.responseText = "I'm looking at you. No practice case is open, so a sentence will not be saved until you start a note or select a case."
+                            assistant.responseText = "I'm with you. Nothing is open yet, so I won't save a sentence until you start a note or choose a case."
                         }
                     }
                         .frame(height: 150)
@@ -831,11 +832,11 @@ struct ContentView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .fixedSize(horizontal: false, vertical: true)
                         if chatMemory.style == .brief {
-                            Text("Short answers for this chat. Not saved on a case.")
+                            Text("Keeping it short for you. Not saved on a case.")
                                 .font(.caption)
                                 .foregroundStyle(.white.opacity(0.55))
                         } else if chatMemory.style == .detailed {
-                            Text("More detail for this chat. Not saved on a case.")
+                            Text("Staying with the details for this chat. Not saved on a case.")
                                 .font(.caption)
                                 .foregroundStyle(.white.opacity(0.55))
                         }
@@ -854,7 +855,7 @@ struct ContentView: View {
                                 Button("Redo") { redoCaseEdit() }
                                 Button("Clear") {
                                     caseConversation.reset()
-                                    assistant.responseText = "No practice case is open. The next sentence will not be saved onto a note."
+                                    assistant.responseText = "All right. Nothing is open now, so the next sentence stays in the chat."
                                 }
                             }
                             Text("ROS: \(PracticeTemplateStore.exportText(from: item.ros).isEmpty ? "nothing selected" : PracticeTemplateStore.exportText(from: item.ros))")
@@ -867,15 +868,19 @@ struct ContentView: View {
                         .padding(14)
                         .frame(maxWidth: 790, alignment: .leading)
                         .background(Color.cyan.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
+                    } else if chatMemory.awaitingNote {
+                        Text("Ready when you are. The next message starts the note.")
+                            .font(.callout)
+                            .foregroundStyle(.cyan.opacity(0.9))
+                            .frame(maxWidth: 790, alignment: .leading)
                     } else {
-                        Text("No practice case is open. Questions stay in the chat. Start a note before a symptom or CPT code can be saved.")
+                        Text("Nothing is open. Say “start a note”, then tell me the visit.")
                             .font(.callout)
                             .foregroundStyle(.white.opacity(0.7))
                             .frame(maxWidth: 790, alignment: .leading)
                     }
 
                     if assistant.isTimerRunning { timerPanel }
-                    commandPanel
 
                     DisclosureGroup("Browse cases — optional exact-text controls", isExpanded: $showCaseBrowser) {
                         HomeCaseRecallView(activeProfileID: assistant.activeProfileID) { answer in
@@ -897,6 +902,12 @@ struct ContentView: View {
                 .frame(maxWidth: 1_100)
                 .frame(maxWidth: .infinity)
             }
+            commandPanel
+                .padding(.horizontal, 28)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity)
+                .background(.black.opacity(0.28))
+            }
         }
         .frame(minWidth: 900, minHeight: 740)
         .onChange(of: speech.isListening) { _, listening in
@@ -911,7 +922,7 @@ struct ContentView: View {
             chatMemory.reset()
             showCaseBrowser = false
             assistant.commandText = ""
-            assistant.responseText = "Profile changed. Ready for a new request."
+            assistant.responseText = "Switched profiles. I'm here when you are."
             assistant.characterState = assistant.isSleeping ? .sleeping : .idle
         }
         .onChange(of: profileCases.map(\.persistentModelID)) { _, _ in
@@ -1042,7 +1053,7 @@ struct ContentView: View {
     private var commandButtons: some View {
         HStack(spacing: 12) {
             TextField(
-                "Ask, follow up, or start a note",
+                chatMemory.awaitingNote ? "Ready when you are. Type the visit." : "Ask, follow up, or start a note",
                 text: $assistant.commandText
             )
             .textFieldStyle(.roundedBorder)
@@ -1070,6 +1081,10 @@ struct ContentView: View {
             .buttonStyle(.borderedProminent)
             .tint(.cyan)
             .disabled(isGenerating)
+
+            Button("Clear") { clearHomeScreen() }
+                .buttonStyle(.bordered)
+                .help("Clear the reply and start a new prompt")
 
             if isGenerating {
                 ProgressView().controlSize(.small)
@@ -1168,10 +1183,45 @@ struct ContentView: View {
             return
         }
 
+        if HomeTurnRouter.isFreshPrompt(input) {
+            assistant.commandText = ""
+            clearHomeScreen()
+            return
+        }
+
+        // "Start a note" waits. The next sentence is the visit, and only then is a case saved.
+        if chatMemory.awaitingNote {
+            assistant.commandText = ""
+            if PracticeNoteChatRouter.isWaitingStart(input) || input.count < 12 {
+                finishTurn(input, "Ready when you are. Tell me the visit in the next message, or say “clear” to stop.", state: .idle)
+                return
+            }
+            chatMemory.finishNoteIntake()
+            beginPracticeNote(.start(PracticeNoteChatRouter.narrative(from: input)), user: input)
+            return
+        }
+
+        if PracticeNoteChatRouter.isWaitingStart(input) {
+            assistant.commandText = ""
+            chatMemory.expectNote()
+            finishTurn(input, "Okay. Ready when you are.", state: .happy)
+            return
+        }
+
         // Saves and code lookup stay in application code. The model does not run these.
         if let action = PracticeNoteChatRouter.action(for: input) {
             assistant.commandText = ""
-            beginPracticeNote(action, user: input)
+            if PracticeNoteChatRouter.looksLikeVisit(input), PracticeNoteChatRouter.needsOpenNote(action) {
+                beginPracticeNote(.start(PracticeNoteChatRouter.narrative(from: input)), user: input)
+            } else {
+                beginPracticeNote(action, user: input)
+            }
+            return
+        }
+
+        if PracticeNoteChatRouter.looksLikeVisit(input) {
+            assistant.commandText = ""
+            beginPracticeNote(.start(PracticeNoteChatRouter.narrative(from: input)), user: input)
             return
         }
 
@@ -1211,6 +1261,17 @@ struct ContentView: View {
         }
     }
 
+    private func clearHomeScreen() {
+        cancelGeneration()
+        chatMemory.finishNoteIntake()
+        assistant.commandText = ""
+        speech.stop()
+        let reply = "Cleared. Say “start a note” when you want a new one."
+        assistant.responseText = reply
+        assistant.characterState = .idle
+        chatMemory.remember(user: "clear", assistant: reply)
+    }
+
     private func finishTurn(_ user: String, _ reply: String, state: CharacterState) {
         assistant.responseText = reply
         assistant.characterState = state
@@ -1224,15 +1285,15 @@ struct ContentView: View {
             let reply: String
             switch style {
             case .brief:
-                reply = "I’ll keep answers short for this chat. That choice stays in this conversation only. It is not saved on a practice case. Say “normal answers” when you want the usual length."
+                reply = "Of course. I'll keep it short for this chat. Say “normal answers” if you want my usual pace. I haven't saved that anywhere."
             case .detailed:
-                reply = "I’ll add a little more detail for this chat. I still will not save a note, a code, or a task unless you ask for that directly."
+                reply = "I can stay with you a little longer on each answer. I still won't save a note, a code, or a task unless you ask."
             case .usual:
-                reply = "Back to the usual length for this chat. I still will not save anything unless you ask."
+                reply = "Back to my usual pace. I still won't save anything unless you ask."
             }
             finishTurn(user, reply, state: .happy)
         case .needsEarlierReply:
-            finishTurn(user, "I don’t have an earlier reply in this chat yet. Ask the question you want explained. Nothing was saved.", state: .idle)
+            finishTurn(user, "I don't have an earlier reply to soften yet. Tell me what you'd like explained. Nothing was saved.", state: .idle)
         case .reviseLastReply:
             generateReply(user, revising: true)
         case .reopenCase(let hint):
@@ -1291,10 +1352,11 @@ struct ContentView: View {
         let caseContext = revising
             ? "Not requested. Rewrite the previous reply only."
             : openCaseContext()
+        let name = assistant.selectedUser
         requestID = id
         isGenerating = true
         assistant.characterState = .thinking
-        assistant.responseText = "Asking the on-device model. This does not change a practice case."
+        assistant.responseText = "One moment. I'm only reading, not changing the note."
         generationTask = Task { @MainActor in
             defer {
                 if requestID == id {
@@ -1311,7 +1373,8 @@ struct ContentView: View {
                     earlierReply: earlierReply,
                     style: style,
                     taskContext: tasks,
-                    revising: revising
+                    revising: revising,
+                    personName: name
                 )
                 try Task.checkCancellation()
                 guard requestID == id, assistant.activeProfileID == profile else { return }

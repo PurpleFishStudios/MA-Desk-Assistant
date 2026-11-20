@@ -44,7 +44,8 @@ final class LocalAIService {
         earlierReply: String = "",
         style: HomeReplyStyle = .usual,
         taskContext: String = "Not requested.",
-        revising: Bool = false
+        revising: Bool = false,
+        personName: String = ""
     ) async throws -> String {
         await prepareIfNeeded()
         guard let session else {
@@ -64,12 +65,18 @@ final class LocalAIService {
             length = "Use a few short sentences."
         }
         let focus = revising
-            ? "They want the previous reply rewritten. Do that. Do not switch to the practice case."
+            ? "They want the previous reply said again, more simply or more briefly. Do that. Do not switch to the practice case."
             : "Use the previous reply only when their new message refers to it, such as “that”, “the second one”, or “shorter”."
+        let who = personName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let nameLine = who.isEmpty
+            ? "Someone is at the desk."
+            : "You are with \(who). Use the name once in a while, not in every sentence."
         let prompt = """
         \(length)
         \(focus)
-        Sound like a person helping at the desk. Do not list commands unless they asked what you can do.
+        \(nameLine)
+        Be calm, warm, and precise. Notice what is already open. Offer one next step when they seem stuck.
+        Do not list commands unless they asked what you can do. Do not imitate a film character.
 
         Previous message:
         \(Self.promptText(earlierUser, limit: 500))
@@ -89,18 +96,20 @@ final class LocalAIService {
         let response = try await session.respond(to: prompt)
         let text = response.content.trimmingCharacters(in: .whitespacesAndNewlines)
         if text.isEmpty {
-            return "The on-device model returned an empty reply. Nothing was saved to a practice case."
+            return "I didn't get a reply back. Nothing was saved."
         }
         return """
         \(text)
 
-        Practice draft from the on-device model. Not a diagnosis or a billing decision. Nothing was saved to a practice case.
+        \(Self.safetyLine)
         """
     }
 
+    private static let safetyLine = "I have not changed the note. This is practice material, not a diagnosis or a billing decision."
+
     private static func promptText(_ text: String, limit: Int) -> String {
         var value = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let footer = "Practice draft from the on-device model. Not a diagnosis or a billing decision. Nothing was saved to a practice case."
+        let footer = safetyLine
         if let range = value.range(of: footer) {
             value.removeSubrange(range)
         }
@@ -113,14 +122,15 @@ final class LocalAIService {
     }
 
     private static let instructions = """
-    You are MA Desk, talking with the person at the desk about fictional practice work.
-    The app already decided which case and which tasks you can see. Use only that text.
-    If no case is open, say so and do not invent a note.
+    You are MA Desk, a calm presence at the desk. You are warm and precise, like a trusted colleague who stays nearby.
+    Speak in plain sentences. No slang, no catchphrases, and no film characters.
+    The app already chose which case and which tasks you can see. Use only that text.
+    If no case is open, say so gently and do not invent a note.
     You cannot change a note, choose a diagnosis, choose a billing code, or mark a task complete.
-    If they ask you to save or add something, say what they can type, such as “Start a note” or “Add CPT 99213”, and do not claim it was saved.
-    If something is missing from the open note, name the missing part.
+    If they ask you to save or add something, tell them the sentence that does it, such as “Start a note” or “Add CPT 99213”, and do not claim it was saved.
+    If something is missing from the open note, name it kindly and offer to stay on that part.
     If there is no previous reply and they refer to one, say you do not have one yet.
-    Treat every clinical detail as fictional practice material, not validated medical guidance.
+    Every clinical detail is fictional practice material, not medical advice.
     """
 
     private static func message(for reason: SystemLanguageModel.Availability.UnavailableReason) -> String {

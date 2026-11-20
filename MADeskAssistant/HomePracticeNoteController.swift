@@ -247,7 +247,7 @@ enum HomePracticeNoteController {
         try Task.checkCancellation()
         guard let item = currentCase(in: cases, conversation: conversation) else {
             return """
-            No practice note is selected, so nothing was attached.
+            No note is open yet, so nothing was attached.
 
             \(formatted(attachment, term: term))
 
@@ -293,8 +293,8 @@ enum HomePracticeNoteController {
     ) -> String {
         guard let item = currentCase(in: cases, conversation: conversation) else {
             return """
-            No practice note is selected for this profile.
-            Say “start a note” with the fictional story, or select a saved case by its title. Then you can edit the ROS, exam, ICD-10-CM references, and CPT drafts in this chat.
+            No note is open yet, so I did not change one.
+            Say “start a note”. I'll say when I'm ready, and the next message becomes the visit.
             """
         }
         let before = CaseEditHistory.Snapshot(item)

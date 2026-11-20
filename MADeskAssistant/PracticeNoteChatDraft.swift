@@ -187,6 +187,33 @@ enum PracticeNoteChatRouter {
         return nil
     }
 
+    /// "Start a note" with no visit yet. The next message should become the note.
+    static func isWaitingStart(_ input: String) -> Bool {
+        guard case .start(let narrative)? = action(for: input) else { return false }
+        let raw = narrative.raw.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
+        return raw.isEmpty
+    }
+
+    /// A sentence that already tells the visit, so it can open a note instead of editing one.
+    static func looksLikeVisit(_ input: String) -> Bool {
+        let text = " \(input.lowercased()) "
+        guard input.trimmingCharacters(in: .whitespacesAndNewlines).count >= 40 else { return false }
+        let cues = [
+            "year old", "year-old", " y/o", " yo ", "h/o", "hx of", " c/o",
+            "here for", "pt is", "patient is", "f/u", "follow up", "follow-up"
+        ]
+        return cues.filter { text.contains($0) }.count >= 2
+    }
+
+    static func needsOpenNote(_ action: PracticeNoteChatAction) -> Bool {
+        switch action {
+        case .removeFinding, .addFinding, .setFinding, .addICD, .removeICD, .addCPT, .removeCPT:
+            return true
+        default:
+            return false
+        }
+    }
+
     private static func plainFindingEdit(in text: String, source: String) -> PracticeNoteChatAction? {
         if text.contains("?") || text.hasPrefix("what") || text.hasPrefix("why") || text.hasPrefix("how") || text.hasPrefix("when") || text.hasPrefix("who") {
             return nil

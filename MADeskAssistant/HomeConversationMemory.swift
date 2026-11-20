@@ -107,6 +107,19 @@ enum HomeTurnRouter {
         return cues.contains { text.hasPrefix($0) || text.contains($0) }
     }
 
+    /// A whole message that only asks to wipe the reply and start again.
+    static func isFreshPrompt(_ input: String) -> Bool {
+        let text = normalize(input)
+        if text == "cancel" || text == "cancel timer" { return false }
+        return freshPrompts.contains(text)
+    }
+
+    private static let freshPrompts: Set<String> = [
+        "clear", "clear screen", "clear the screen", "clear this", "clear chat",
+        "new prompt", "start over", "start again", "never mind", "nevermind",
+        "forget it", "scratch that"
+    ]
+
     static func styleChange(in input: String) -> HomeReplyStyle? {
         var text = normalize(input)
         var trimmedLead = true
@@ -268,6 +281,7 @@ enum HomeTurnRouter {
 @Observable
 final class HomeConversationMemory {
     private(set) var style: HomeReplyStyle = .usual
+    private(set) var awaitingNote = false
     private(set) var lastUser = ""
     private(set) var lastAssistant = ""
 
@@ -283,6 +297,14 @@ final class HomeConversationMemory {
         style = newStyle
     }
 
+    func expectNote() {
+        awaitingNote = true
+    }
+
+    func finishNoteIntake() {
+        awaitingNote = false
+    }
+
     func remember(user: String, assistant: String) {
         let userText = user.trimmingCharacters(in: .whitespacesAndNewlines)
         let assistantText = assistant.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -295,5 +317,6 @@ final class HomeConversationMemory {
         lastUser = ""
         lastAssistant = ""
         style = .usual
+        awaitingNote = false
     }
 }
