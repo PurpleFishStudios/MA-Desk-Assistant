@@ -119,6 +119,7 @@ final class HomeCaseConversation {
             if matches.isEmpty {
                 pendingIDs = []
                 pendingSection = nil
+                if isQuestion(query) { return nil }
                 return "No matching fictional case was found in this profile. Try its saved title or fake identifier, or type ‘list cases’. No other case was substituted."
             }
             if matches.count == 1 {
@@ -173,6 +174,10 @@ final class HomeCaseConversation {
                     ("Plan", item.plan)].map { "\($0.0):\n\(value($0.1))" }.joined(separator: "\n\n")
         }
         return "Saved \(heading) for ‘\(value(item.title))’:\n\n\(text)\n\nSource: \(value(item.title)) · \(value(item.identifier)) → \(heading)\nSaved: \(item.updatedAt.formatted())\nExact saved-text recall — not an AI interpretation or a new clinical recommendation."
+    }
+
+    private func isQuestion(_ query: String) -> Bool {
+        query.contains("?") || query.hasPrefix("what") || query.hasPrefix("why") || query.hasPrefix("how") || query.hasPrefix("which")
     }
 
     private func requestedSection(_ query: String) -> Section? {

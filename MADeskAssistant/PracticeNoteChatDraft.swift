@@ -87,7 +87,8 @@ struct PracticeNoteNarrative: Equatable {
                 options: .regularExpression
             )
             cleaned = cleaned.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
-            guard cleaned.count >= 3, cleaned.count <= 60, !skip.contains(cleaned) else { continue }
+            guard cleaned.count >= 3, cleaned.count <= 40, !skip.contains(cleaned) else { continue }
+            if cleaned.contains("cpt") || cleaned.contains("code") || cleaned.contains("add ") { continue }
             terms.append(cleaned)
         }
         return terms
@@ -285,12 +286,25 @@ enum PracticeNoteChatRouter {
             ageYears: age(in: lowered),
             sex: sex(in: lowered),
             history: history,
-            concern: concern,
+            concern: clinicalConcern(concern),
             request: request,
             statedExam: statedExam,
             statedCPT: statedCPT(in: original, pattern: #"(?i)\bcpt(?:\s+code)?\s*#?\s*([0-9]{5})(?:[- ]([0-9]{2}))?(?:\s*[-—:]\s*|\s+)?([a-z][^.,;\n]{0,80})?"#),
             raw: original
         )
+    }
+
+    private static func clinicalConcern(_ text: String) -> String {
+        var value = text
+        if let command = value.range(of: #"\badd\s+cpt\b.*"#, options: [.regularExpression, .caseInsensitive]) {
+            value.removeSubrange(command)
+        }
+        value = value.trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: ",.;")))
+        for prefix in ["he has a ", "he has ", "she has a ", "she has ", "patient has a ", "patient has ", "pt has a ", "pt has "]
+        where value.lowercased().hasPrefix(prefix) {
+            value = String(value.dropFirst(prefix.count))
+        }
+        return value.trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: ",.;")))
     }
 
     private static let startPrefixes = [

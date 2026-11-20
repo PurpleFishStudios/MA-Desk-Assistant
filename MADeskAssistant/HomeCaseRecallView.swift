@@ -5,6 +5,7 @@ import SwiftData
 struct HomeCaseRecallView: View {
     let activeProfileID: String
     let onAnswer: (String) -> Void
+    var onOpen: (PracticeCase) -> Void = { _ in }
 
     @Query(sort: \PracticeCase.updatedAt, order: .reverse)
     private var allCases: [PracticeCase]
@@ -84,13 +85,9 @@ struct HomeCaseRecallView: View {
             )
         }
         .onChange(of: selectedID) { _, newID in
-            if newID != nil {
-                onAnswer(
-                    """
-                    Case selected. Choose Saved Assessment, \
-                    Saved Plan, or Saved SOAP Text.
-                    """
-                )
+            if newID != nil, let item = selectedCase {
+                onOpen(item)
+                onAnswer("Opened \(item.title) for this chat. Questions about this note use it and do not save changes.")
             } else {
                 onAnswer(
                     "No case selected. Choose a fictional case to review."

@@ -110,10 +110,25 @@ final class HomeICDLookup {
             return ICDReferenceLookup(matches: [], note: "No local ICD-10-CM entry matched \(term). Nothing was attached.")
         }
 
-        if let billable = hits.first(where: { $0.code.isBillable && !$0.isIncomplete }) {
+        let words = term
+            .lowercased()
+            .split(whereSeparator: { !$0.isLetter })
+            .map(String.init)
+            .filter { $0.count >= 4 }
+        if let billable = hits.first(where: { hit in
+            hit.code.isBillable && !hit.isIncomplete && words.contains {
+                hit.code.longDescription.localizedCaseInsensitiveContains($0)
+            }
+        }) {
             return ICDReferenceLookup(
                 matches: [ICDReferenceMatch(code: billable.code.code, descriptionText: billable.code.longDescription)],
                 note: nil
+            )
+        }
+        if !words.isEmpty {
+            return ICDReferenceLookup(
+                matches: [],
+                note: "No ICD-10-CM description contained “\(words.joined(separator: " "))”. Nothing was attached."
             )
         }
         return ICDReferenceLookup(

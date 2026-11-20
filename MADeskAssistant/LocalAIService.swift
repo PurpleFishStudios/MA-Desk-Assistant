@@ -37,7 +37,7 @@ final class LocalAIService {
         }
     }
 
-    func reply(to input: String) async throws -> String {
+    func reply(to input: String, caseContext: String) async throws -> String {
         await prepareIfNeeded()
         guard let session else {
             return """
@@ -46,7 +46,14 @@ final class LocalAIService {
             Note, ICD-10, and CPT commands still work. Nothing was saved to a practice case.
             """
         }
-        let response = try await session.respond(to: input)
+        let prompt = """
+        Open fictional practice case:
+        \(caseContext)
+
+        Question:
+        \(input)
+        """
+        let response = try await session.respond(to: prompt)
         let text = response.content.trimmingCharacters(in: .whitespacesAndNewlines)
         if text.isEmpty {
             return "The on-device model returned an empty reply. Nothing was saved to a practice case."
@@ -61,8 +68,10 @@ final class LocalAIService {
     private static let instructions = """
     You are MA Desk, a desk assistant for fictional practice cases.
     Answer in a few short sentences.
-    You cannot see saved records, and you cannot change a note, choose a diagnosis, or choose a billing code.
-    If the person wants to edit a note, tell them to start a note or describe the symptom while a case is open.
+    The question includes the open practice case when one is open. Use only that text.
+    If no case is open, say so and do not invent a note.
+    You cannot change a note, choose a diagnosis, or choose a billing code.
+    If something is missing from the note, name the missing part.
     Treat every clinical detail as fictional practice material, not validated medical guidance.
     """
 

@@ -860,10 +860,10 @@ struct ContentView: View {
                     DisclosureGroup("Browse cases — optional exact-text controls", isExpanded: $showCaseBrowser) {
                         HomeCaseRecallView(activeProfileID: assistant.activeProfileID) { answer in
                             cancelGeneration()
-                            // The optional browser has its own picker; do not imply it sets chat context.
-                            caseConversation.reset()
                             assistant.responseText = answer
                             assistant.characterState = .idle
+                        } onOpen: { item in
+                            caseConversation.adopt(item, profileID: assistant.activeProfileID)
                         }
                         .padding(.top, 8)
                         .disabled(isGenerating)
@@ -1181,6 +1181,32 @@ struct ContentView: View {
     }
 
 
+    private func openCaseContext() -> String {
+        guard let item = currentChatCase else {
+            return "No practice case is open."
+        }
+        let ros = PracticeTemplateStore.exportText(from: item.ros)
+        let exam = PracticeTemplateStore.exportText(from: item.pe)
+        let icd = item.codeReferences
+            .map { "\($0.code) \($0.descriptionText)" }
+            .joined(separator: "; ")
+        let cpt = PracticeCPTStore.load(item.cptDraftData)
+            .map(PracticeCPTStore.displayLine)
+            .joined(separator: "; ")
+        return """
+        Title: \(item.title)
+        Identifier: \(item.identifier)
+        Reason: \(item.reasonForVisit)
+        History: \(item.hpi)
+        ROS: \(ros.isEmpty ? "nothing selected" : ros)
+        Exam: \(exam.isEmpty ? "nothing selected" : exam)
+        Assessment: \(item.assessment)
+        Plan: \(item.plan)
+        ICD-10-CM references: \(icd.isEmpty ? "none" : icd)
+        CPT practice codes: \(cpt.isEmpty ? "none" : cpt)
+        """
+    }
+
     private func generateReply(_ input: String) {
         guard !input.isEmpty else { return }
         let id = UUID()
@@ -1198,7 +1224,7 @@ struct ContentView: View {
                 }
             }
             do {
-                let answer = try await ai.reply(to: input)
+                let answer = try await ai.reply(to: input, caseContext: openCaseContext())
                 try Task.checkCancellation()
                 guard requestID == id, assistant.activeProfileID == profile else { return }
                 assistant.responseText = answer
