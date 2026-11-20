@@ -79,7 +79,7 @@ final class AssistantViewModel {
 
     var characterState: CharacterState = .idle
     var commandText = ""
-    var responseText = "Ready when you are. Type “help” to see all commands."
+    var responseText = "Ready when you are. Ask a question, follow up on the last reply, or type “help”."
     var isQuietMode = false
     var isSleeping = false
     var tasks: [DeskTask] = []
@@ -148,6 +148,11 @@ final class AssistantViewModel {
     }
 
     private func handleCommand(_ command: String, cases: [PracticeCase] = [], onUnrecognized: (() -> Void)? = nil) {
+        if HomeTurnRouter.talksRatherThanCommands(command) {
+            onUnrecognized?()
+            return
+        }
+
         if command == "help" || command == "commands" || command == "what can you do" || command.contains("help") {
             showHelp()
 
@@ -222,6 +227,11 @@ final class AssistantViewModel {
     private func showHelp() {
         responseText = """
         Available Commands:
+
+        💬 Conversation, nothing is saved:
+        • “Explain that more simply” uses the last reply
+        • “Go back to the rash case” opens that saved case
+        • “Keep your answers short” lasts for this chat only
 
         📝 Practice Notes:
         • “Start a note. Patient is a 60 year old with h/o hypertension and c/o cough, and wants a work note.”
@@ -770,6 +780,7 @@ struct ContentView: View {
     @State private var isGenerating = false
     @State private var practiceNoteTask = false
     @State private var caseConversation = HomeCaseConversation()
+    @State private var chatMemory = HomeConversationMemory()
     @State private var showCaseBrowser = false
     @State private var speech = HomeSpeech()
     @Query(sort: \PracticeCase.updatedAt, order: .reverse) private var allCases: [PracticeCase]
@@ -819,6 +830,15 @@ struct ContentView: View {
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .fixedSize(horizontal: false, vertical: true)
+                        if chatMemory.style == .brief {
+                            Text("Short answers for this chat. Not saved on a case.")
+                                .font(.caption)
+                                .foregroundStyle(.white.opacity(0.55))
+                        } else if chatMemory.style == .detailed {
+                            Text("More detail for this chat. Not saved on a case.")
+                                .font(.caption)
+                                .foregroundStyle(.white.opacity(0.55))
+                        }
                     }
                     .padding(18)
                     .frame(maxWidth: 790, alignment: .leading)
@@ -888,6 +908,7 @@ struct ContentView: View {
         .onChange(of: assistant.activeProfileID) { _, _ in
             cancelGeneration()
             caseConversation.reset()
+            chatMemory.reset()
             showCaseBrowser = false
             assistant.commandText = ""
             assistant.responseText = "Profile changed. Ready for a new request."
@@ -903,6 +924,7 @@ struct ContentView: View {
             cancelGeneration()
             speech.stop()
             caseConversation.reset()
+            chatMemory.reset()
         }
     }
 
@@ -1020,7 +1042,7 @@ struct ContentView: View {
     private var commandButtons: some View {
         HStack(spacing: 12) {
             TextField(
-                "Start a note, ask a question, or type help",
+                "Ask, follow up, or start a note",
                 text: $assistant.commandText
             )
             .textFieldStyle(.roundedBorder)
@@ -1142,19 +1164,20 @@ struct ContentView: View {
 
         if assistant.isSleeping {
             assistant.submitCommand(cases: profileCases)
+            chatMemory.remember(user: input, assistant: assistant.responseText)
             return
         }
 
+        // Saves and code lookup stay in application code. The model does not run these.
         if let action = PracticeNoteChatRouter.action(for: input) {
             assistant.commandText = ""
-            beginPracticeNote(action)
+            beginPracticeNote(action, user: input)
             return
         }
 
-        // Search the package before case routing or AI generation.
         if let term = HomeICDLookup.searchTerm(from: input) {
             assistant.commandText = ""
-            searchHomeICD(term)
+            searchHomeICD(term, user: input)
             return
         }
 
@@ -1170,14 +1193,64 @@ struct ContentView: View {
             profileID: assistant.activeProfileID
         ) {
             assistant.commandText = ""
-            assistant.responseText = answer
-            assistant.characterState = .idle
+            finishTurn(input, answer, state: .idle)
+            return
+        }
+
+        if let intent = chatMemory.interpret(input) {
+            assistant.commandText = ""
+            applyConversation(intent, user: input)
             return
         }
 
         assistant.submitCommand(cases: profileCases) {
             generateReply(input)
         }
+        if !isGenerating {
+            chatMemory.remember(user: input, assistant: assistant.responseText)
+        }
+    }
+
+    private func finishTurn(_ user: String, _ reply: String, state: CharacterState) {
+        assistant.responseText = reply
+        assistant.characterState = state
+        chatMemory.remember(user: user, assistant: reply)
+    }
+
+    private func applyConversation(_ intent: HomeTurnIntent, user: String) {
+        switch intent {
+        case .setStyle(let style):
+            chatMemory.use(style)
+            let reply: String
+            switch style {
+            case .brief:
+                reply = "I’ll keep answers short for this chat. That choice stays in this conversation only. It is not saved on a practice case. Say “normal answers” when you want the usual length."
+            case .detailed:
+                reply = "I’ll add a little more detail for this chat. I still will not save a note, a code, or a task unless you ask for that directly."
+            case .usual:
+                reply = "Back to the usual length for this chat. I still will not save anything unless you ask."
+            }
+            finishTurn(user, reply, state: .happy)
+        case .needsEarlierReply:
+            finishTurn(user, "I don’t have an earlier reply in this chat yet. Ask the question you want explained. Nothing was saved.", state: .idle)
+        case .reviseLastReply:
+            generateReply(user, revising: true)
+        case .reopenCase(let hint):
+            let reply = caseConversation.resumeDescribed(
+                hint,
+                cases: profileCases,
+                profileID: assistant.activeProfileID
+            )
+            finishTurn(user, reply, state: .happy)
+        }
+    }
+
+    private func deskTaskContext() -> String {
+        let open = assistant.tasks.filter { !$0.isComplete }
+        guard !open.isEmpty else { return "No unfinished desk tasks." }
+        let lines = open.prefix(8).enumerated().map { "\($0.offset + 1). \($0.element.title)" }
+        let extra = open.count > 8 ? "\nAnd \(open.count - 8) more." : ""
+        return lines.joined(separator: "\n") + extra
     }
 
 
@@ -1207,10 +1280,17 @@ struct ContentView: View {
         """
     }
 
-    private func generateReply(_ input: String) {
+    private func generateReply(_ input: String, revising: Bool = false) {
         guard !input.isEmpty else { return }
         let id = UUID()
         let profile = assistant.activeProfileID
+        let earlierUser = chatMemory.lastUser
+        let earlierReply = chatMemory.lastAssistant
+        let style = chatMemory.style
+        let tasks = input.lowercased().contains("task") ? deskTaskContext() : "Not requested."
+        let caseContext = revising
+            ? "Not requested. Rewrite the previous reply only."
+            : openCaseContext()
         requestID = id
         isGenerating = true
         assistant.characterState = .thinking
@@ -1224,28 +1304,41 @@ struct ContentView: View {
                 }
             }
             do {
-                let answer = try await ai.reply(to: input, caseContext: openCaseContext())
+                let answer = try await ai.reply(
+                    to: input,
+                    caseContext: caseContext,
+                    earlierUser: earlierUser,
+                    earlierReply: earlierReply,
+                    style: style,
+                    taskContext: tasks,
+                    revising: revising
+                )
                 try Task.checkCancellation()
                 guard requestID == id, assistant.activeProfileID == profile else { return }
                 assistant.responseText = answer
                 assistant.characterState = .happy
+                chatMemory.remember(user: input, assistant: answer)
             } catch is CancellationError {
                 guard requestID == id, assistant.activeProfileID == profile else { return }
-                assistant.responseText = "On-device reply stopped. Nothing was saved to a practice case."
+                let stopped = "On-device reply stopped. Nothing was saved to a practice case."
+                assistant.responseText = stopped
                 assistant.characterState = .idle
+                chatMemory.remember(user: input, assistant: stopped)
             } catch {
                 guard requestID == id, assistant.activeProfileID == profile else { return }
-                assistant.responseText = """
+                let failed = """
                 The on-device model could not answer: \(error.localizedDescription)
 
                 Note, ICD-10, and CPT commands still work. Nothing was saved to a practice case.
                 """
+                assistant.responseText = failed
                 assistant.characterState = .error
+                chatMemory.remember(user: input, assistant: failed)
             }
         }
     }
 
-    private func searchHomeICD(_ term: String) {
+    private func searchHomeICD(_ term: String, user: String) {
         let id = UUID()
         let profile = assistant.activeProfileID
 
@@ -1276,12 +1369,16 @@ struct ContentView: View {
                 let caseNote = caseConversation.currentTitle.map {
                     "\n\nThis search did not change the open case: \($0)."
                 } ?? "\n\nNo practice case was changed."
-                assistant.responseText = answer + caseNote
+                let reply = answer + caseNote
+                assistant.responseText = reply
                 assistant.characterState = .idle
+                chatMemory.remember(user: user, assistant: reply)
             } catch is CancellationError {
                 if requestID == id, assistant.activeProfileID == profile {
-                    assistant.responseText = "ICD-10-CM search canceled."
+                    let stopped = "ICD-10-CM search canceled."
+                    assistant.responseText = stopped
                     assistant.characterState = .idle
+                    chatMemory.remember(user: user, assistant: stopped)
                 }
             } catch {
                 guard requestID == id,
@@ -1289,30 +1386,29 @@ struct ContentView: View {
                     return
                 }
 
-                assistant.responseText = """
+                let failed = """
                 Local ICD-10-CM lookup failed:
                 \(error)
 
                 No AI-generated code was substituted.
                 """
+                assistant.responseText = failed
                 assistant.characterState = .error
+                chatMemory.remember(user: user, assistant: failed)
             }
         }
     }
 
-    private func beginPracticeNote(_ action: PracticeNoteChatAction) {
+    private func beginPracticeNote(_ action: PracticeNoteChatAction, user: String) {
         switch action {
         case .explainCPT:
-            assistant.responseText = PracticeNoteChatRouter.cptHelp
-            assistant.characterState = .idle
+            finishTurn(user, PracticeNoteChatRouter.cptHelp, state: .idle)
             return
         case .lookupCPT(let term):
-            assistant.responseText = PracticeCPTLibrary.lookupReply(for: term)
-            assistant.characterState = .idle
+            finishTurn(user, PracticeCPTLibrary.lookupReply(for: term), state: .idle)
             return
         case .explainICD:
-            assistant.responseText = PracticeNoteChatRouter.icdHelp
-            assistant.characterState = .idle
+            finishTurn(user, PracticeNoteChatRouter.icdHelp, state: .idle)
             return
         default:
             break
@@ -1349,19 +1445,24 @@ struct ContentView: View {
                 guard requestID == id, assistant.activeProfileID == profile else { return }
                 assistant.responseText = message
                 assistant.characterState = .happy
+                chatMemory.remember(user: user, assistant: message)
             } catch is CancellationError {
                 guard requestID == id, assistant.activeProfileID == profile else { return }
-                assistant.responseText = "Stopped. Check Practice Cases before starting another draft. A note is saved only if it is listed there."
+                let stopped = "Stopped. Check Practice Cases before starting another draft. A note is saved only if it is listed there."
+                assistant.responseText = stopped
                 assistant.characterState = .idle
+                chatMemory.remember(user: user, assistant: stopped)
             } catch {
                 guard requestID == id, assistant.activeProfileID == profile else { return }
-                assistant.responseText = """
+                let failed = """
                 The practice note could not be finished:
                 \(error)
 
                 No AI-generated code was substituted.
                 """
+                assistant.responseText = failed
                 assistant.characterState = .error
+                chatMemory.remember(user: user, assistant: failed)
             }
         }
     }

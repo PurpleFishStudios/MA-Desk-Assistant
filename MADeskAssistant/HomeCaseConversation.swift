@@ -38,27 +38,39 @@ final class HomeCaseConversation {
         return !cases.contains { $0.persistentModelID == currentID }
     }
 
+    /// Opens a saved case from a short description such as "rash". Does not edit the note.
+    func resumeDescribed(_ hint: String, cases: [PracticeCase], profileID: String) -> String {
+        let available = ownedCases(cases, profileID: profileID)
+        let tokens = HomeTurnRouter.hintTokens(hint)
+        if tokens.isEmpty {
+            if let currentID, let item = available.first(where: { $0.persistentModelID == currentID }) {
+                return resume(item, alreadyOpen: true)
+            }
+            return "No practice case is open. Tell me part of the title, or say “list cases”. I did not open a note."
+        }
+        let matches = available.filter {
+            HomeTurnRouter.matchesCase(tokens: tokens, title: $0.title, identifier: $0.identifier)
+        }
+        if matches.isEmpty {
+            pendingIDs = []
+            pendingSection = nil
+            return "I could not find a saved case for “\(hint)”. I left the open case as it is. Try the title or identifier, or say “list cases”."
+        }
+        if matches.count == 1 {
+            return resume(matches[0], alreadyOpen: matches[0].persistentModelID == currentID)
+        }
+        return choose(from: matches, section: nil)
+    }
+
     // Returns nil for inputs that should go to the existing command handler.
     func handle(_ input: String, cases: [PracticeCase], profileID: String) -> String? {
-        let owner = normalized(profileID)
-        if ownerID != owner {
-            reset()
-            ownerID = owner
-        }
-        let available = cases.filter {
-            guard let id = $0.ownerProfileID else { return false }
-            return normalized(id) == owner && !owner.isEmpty
-        }
-        if let currentID, !available.contains(where: { $0.persistentModelID == currentID }) {
-            self.currentID = nil
-            currentTitle = nil
-        }
-
+        let available = ownedCases(cases, profileID: profileID)
         let query = normalized(input)
         let words = tokens(query)
         guard !words.isEmpty else { return nil }
 
         if ["forget case", "clear case", "clear current case", "deselect case"].contains(query) {
+            let owner = normalized(profileID)
             reset()
             ownerID = owner
             return "Current case cleared."
@@ -88,6 +100,11 @@ final class HomeCaseConversation {
                 pendingSection = nil
                 return "Case selection canceled."
             }
+        }
+
+        // "Go back to the rash case" is resolved by the conversation layer, which opens one record.
+        if HomeTurnRouter.isCaseResume(query) {
+            return nil
         }
 
         let section = requestedSection(query)
@@ -136,6 +153,35 @@ final class HomeCaseConversation {
             return select(item, section: section)
         }
         return choose(from: available, section: section)
+    }
+
+    private func ownedCases(_ cases: [PracticeCase], profileID: String) -> [PracticeCase] {
+        let owner = normalized(profileID)
+        if ownerID != owner {
+            reset()
+            ownerID = owner
+        }
+        let available = cases.filter {
+            guard let id = $0.ownerProfileID else { return false }
+            return normalized(id) == owner && !owner.isEmpty
+        }
+        if let currentID, !available.contains(where: { $0.persistentModelID == currentID }) {
+            self.currentID = nil
+            currentTitle = nil
+        }
+        return available
+    }
+
+    private func resume(_ item: PracticeCase, alreadyOpen: Bool) -> String {
+        currentID = item.persistentModelID
+        currentTitle = "\(value(item.title)) · \(value(item.identifier))"
+        pendingIDs = []
+        pendingSection = nil
+        let label = "\(value(item.title)) · \(value(item.identifier))"
+        if alreadyOpen {
+            return "We are already on “\(label)”. I did not change the note."
+        }
+        return "Back on “\(label)”. I did not change the note. Ask what is missing, or tell me what to add."
     }
 
     private func choose(from items: [PracticeCase], section: Section?) -> String {

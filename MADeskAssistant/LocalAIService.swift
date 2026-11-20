@@ -37,7 +37,15 @@ final class LocalAIService {
         }
     }
 
-    func reply(to input: String, caseContext: String) async throws -> String {
+    func reply(
+        to input: String,
+        caseContext: String,
+        earlierUser: String = "",
+        earlierReply: String = "",
+        style: HomeReplyStyle = .usual,
+        taskContext: String = "Not requested.",
+        revising: Bool = false
+    ) async throws -> String {
         await prepareIfNeeded()
         guard let session else {
             return """
@@ -46,11 +54,36 @@ final class LocalAIService {
             Note, ICD-10, and CPT commands still work. Nothing was saved to a practice case.
             """
         }
+        let length: String
+        switch style {
+        case .brief:
+            length = "Use one or two short sentences."
+        case .detailed:
+            length = "You may use a short paragraph. Stay on the question."
+        case .usual:
+            length = "Use a few short sentences."
+        }
+        let focus = revising
+            ? "They want the previous reply rewritten. Do that. Do not switch to the practice case."
+            : "Use the previous reply only when their new message refers to it, such as “that”, “the second one”, or “shorter”."
         let prompt = """
-        Open fictional practice case:
+        \(length)
+        \(focus)
+        Sound like a person helping at the desk. Do not list commands unless they asked what you can do.
+
+        Previous message:
+        \(Self.promptText(earlierUser, limit: 500))
+
+        Your previous reply:
+        \(Self.promptText(earlierReply, limit: 1_200))
+
+        Open fictional practice case, retrieved by the app:
         \(caseContext)
 
-        Question:
+        Desk tasks, retrieved by the app. Suggest an order only if they asked about tasks. Do not say a task was completed.
+        \(taskContext)
+
+        New message:
         \(input)
         """
         let response = try await session.respond(to: prompt)
@@ -65,13 +98,28 @@ final class LocalAIService {
         """
     }
 
+    private static func promptText(_ text: String, limit: Int) -> String {
+        var value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let footer = "Practice draft from the on-device model. Not a diagnosis or a billing decision. Nothing was saved to a practice case."
+        if let range = value.range(of: footer) {
+            value.removeSubrange(range)
+        }
+        value = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return "None." }
+        if value.count > limit {
+            return String(value.prefix(limit)) + "…"
+        }
+        return value
+    }
+
     private static let instructions = """
-    You are MA Desk, a desk assistant for fictional practice cases.
-    Answer in a few short sentences.
-    The question includes the open practice case when one is open. Use only that text.
+    You are MA Desk, talking with the person at the desk about fictional practice work.
+    The app already decided which case and which tasks you can see. Use only that text.
     If no case is open, say so and do not invent a note.
-    You cannot change a note, choose a diagnosis, or choose a billing code.
-    If something is missing from the note, name the missing part.
+    You cannot change a note, choose a diagnosis, choose a billing code, or mark a task complete.
+    If they ask you to save or add something, say what they can type, such as “Start a note” or “Add CPT 99213”, and do not claim it was saved.
+    If something is missing from the open note, name the missing part.
+    If there is no previous reply and they refer to one, say you do not have one yet.
     Treat every clinical detail as fictional practice material, not validated medical guidance.
     """
 
