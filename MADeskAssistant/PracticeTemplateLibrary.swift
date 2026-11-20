@@ -231,6 +231,18 @@ enum PracticeTemplateStore {
         return (encode(document), removed)
     }
 
+    static func select(id: String, detail: String, in stored: String) -> String {
+        let trimmed = stored.trimmingCharacters(in: .whitespacesAndNewlines)
+        var document = decode(stored) ?? PracticeTemplateDocument(
+            selections: [],
+            extraNote: decode(stored) == nil ? trimmed : ""
+        )
+        let opposite = id.hasSuffix(".normal") ? String(id.dropLast(".normal".count)) : id + ".normal"
+        document.selections.removeAll { $0.id == id || $0.id == opposite }
+        document.selections.append(PracticeSelection(id: id, detail: detail))
+        return encode(document)
+    }
+
     static func add(phrase: String, to stored: String, kind: PracticeTemplateKind) -> String {
         let clean = phrase.trimmingCharacters(in: .whitespacesAndNewlines)
         var document = decode(stored) ?? PracticeTemplateDocument(

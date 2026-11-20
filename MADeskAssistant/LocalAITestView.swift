@@ -13,16 +13,23 @@ struct LocalAITestView: View {
             Label("Local AI", systemImage: "brain.head.profile")
                 .font(.largeTitle.bold())
 
-            Text(ai.unavailableMessage)
+            Text(ai.statusMessage)
                 .foregroundStyle(.secondary)
                 .textSelection(.enabled)
 
-            Text("ICD-10 lookup, practice notes, tasks, and dictation do not use this model.")
+            Text(ai.isAvailable
+                 ? "Ask a normal question on Home. Note edits, ICD-10 lookup, and CPT codes still use the desk commands."
+                 : "The desk commands do not need this model.")
                 .font(.callout)
+
+            if ai.isLoading {
+                ProgressView("Checking the on-device model")
+            }
         }
         .frame(maxWidth: 720, alignment: .leading)
         .padding(28)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .navigationTitle("Local AI")
+        .task { await ai.prepareIfNeeded() }
     }
 }

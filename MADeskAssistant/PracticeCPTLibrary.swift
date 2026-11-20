@@ -65,6 +65,25 @@ enum PracticeCPTLibrary {
             $0.code.contains(text) || $0.label.lowercased().contains(text) || $0.group.lowercased().contains(text)
         }
     }
+
+    static func lookupReply(for term: String) -> String {
+        let text = term.trimmingCharacters(in: .whitespacesAndNewlines)
+        let found = matches(text)
+        if found.isEmpty {
+            return """
+            No practice CPT code matched “\(text)”.
+            Open CPT Reference in the sidebar, or try a code such as 99213.
+            This list is a teaching subset, not the official CPT code set, and it does not decide whether a code is appropriate to bill.
+            """
+        }
+        let rows = found.prefix(8).map { "• \($0.code) — \($0.label) (\($0.group))" }.joined(separator: "\n")
+        return """
+        Practice CPT matches for “\(text)”:
+        \(rows)
+
+        These are not a final billing choice. To attach one to the current fictional note, say “Add CPT \(found[0].code)”. Then link an ICD-10-CM reference in Practice Cases.
+        """
+    }
 }
 
 enum PracticeCPTStore {

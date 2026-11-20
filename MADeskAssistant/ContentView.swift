@@ -28,16 +28,29 @@ struct DeskTask: Identifiable, Equatable, Codable {
 }
 
 struct DeskProfile: Identifiable, Hashable, Codable {
-    let id: String
-    let displayName: String
+    var id: String
+    var displayName: String
 
-    static let all: [DeskProfile] = [
+    static let storageKey = "maDeskAssistant.profiles"
+    static let builtIn: [DeskProfile] = [
         DeskProfile(id: "sebastian", displayName: "Sebastian"),
         DeskProfile(id: "medical-assistant", displayName: "Medical Assistant"),
         DeskProfile(id: "front-desk", displayName: "Front Desk"),
         DeskProfile(id: "clinician", displayName: "Clinician"),
         DeskProfile(id: "guest", displayName: "Guest")
     ]
+
+    static func load() -> [DeskProfile] {
+        guard let data = UserDefaults.standard.data(forKey: storageKey),
+              let saved = try? JSONDecoder().decode([DeskProfile].self, from: data),
+              !saved.isEmpty else { return builtIn }
+        return saved
+    }
+
+    static func save(_ profiles: [DeskProfile]) {
+        guard let data = try? JSONEncoder().encode(profiles) else { return }
+        UserDefaults.standard.set(data, forKey: storageKey)
+    }
 }
 
 @Observable
@@ -72,6 +85,8 @@ final class AssistantViewModel {
     var tasks: [DeskTask] = []
     var timerRemaining = 0
     var isTimerRunning = false
+    var eyeColorName = "Cyan"
+    var profiles: [DeskProfile] = DeskProfile.load()
 
     private var timer: Timer?
 
@@ -318,9 +333,45 @@ final class AssistantViewModel {
     }
 
     private func profileID(for profileName: String) -> String {
-        DeskProfile.all.first(where: {
+        profiles.first(where: {
             $0.displayName == profileName
-        })?.id ?? "guest"
+        })?.id ?? profiles.first?.id ?? "guest"
+    }
+
+    func addProfile(named name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let id = trimmed.lowercased().replacingOccurrences(of: " ", with: "-")
+        guard !profiles.contains(where: { $0.id == id || $0.displayName.compare(trimmed, options: .caseInsensitive) == .orderedSame }) else {
+            responseText = "A profile named \(trimmed) already exists."
+            return
+        }
+        profiles.append(DeskProfile(id: id, displayName: trimmed))
+        DeskProfile.save(profiles)
+        selectedUser = trimmed
+        responseText = "Added clinic profile \(trimmed). New fictional notes stay on this profile."
+        characterState = .happy
+    }
+
+    func removeProfile(_ profile: DeskProfile) {
+        guard profiles.count > 1 else { return }
+        profiles.removeAll { $0.id == profile.id }
+        DeskProfile.save(profiles)
+        if selectedUser == profile.displayName {
+            selectedUser = profiles[0].displayName
+        }
+        responseText = "Removed profile \(profile.displayName). Its saved notes stay in the data store and are not deleted."
+        characterState = .idle
+    }
+
+    func renameActiveProfile(to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let index = profiles.firstIndex(where: { $0.displayName == selectedUser }) else { return }
+        profiles[index].displayName = trimmed
+        DeskProfile.save(profiles)
+        selectedUser = trimmed
+        responseText = "Renamed the active profile to \(trimmed)."
+        characterState = .happy
     }
 
     private func tasksStorageKey(for profileName: String) -> String {
@@ -333,7 +384,9 @@ final class AssistantViewModel {
 
     private func loadSavedData() {
         let defaults = UserDefaults.standard
-        selectedUser = defaults.string(forKey: selectedUserStorageKey) ?? "Sebastian"
+        profiles = DeskProfile.load()
+        selectedUser = defaults.string(forKey: selectedUserStorageKey) ?? profiles.first?.displayName ?? "Sebastian"
+        eyeColorName = defaults.string(forKey: "maDeskAssistant.eyeColor") ?? "Cyan"
         isQuietMode = defaults.bool(forKey: quietModeStorageKey)
         isSleeping = defaults.bool(forKey: sleepingStorageKey)
         loadTasksForSelectedProfile()
@@ -361,6 +414,7 @@ final class AssistantViewModel {
     func saveSettings() {
         let defaults = UserDefaults.standard
         defaults.set(selectedUser, forKey: selectedUserStorageKey)
+        defaults.set(eyeColorName, forKey: "maDeskAssistant.eyeColor")
         defaults.set(isQuietMode, forKey: quietModeStorageKey)
         defaults.set(isSleeping, forKey: sleepingStorageKey)
     }
@@ -544,114 +598,163 @@ final class AssistantViewModel {
     }
 }
 
+struct VectorEyePose: Equatable {
+    var centerX: CGFloat = 0
+    var centerY: CGFloat = 0
+    var scaleX: CGFloat = 1
+    var scaleY: CGFloat = 1
+    var angle: Double = 0
+    var upperLid: CGFloat = 0
+    var lowerLid: CGFloat = 0
+    var spacing: CGFloat = 74
+
+    static let neutral = VectorEyePose()
+
+    static func glance(_ x: CGFloat, _ y: CGFloat = 0) -> VectorEyePose {
+        VectorEyePose(centerX: x, centerY: y, angle: Double(x) * 0.15)
+    }
+}
+
 struct CharacterView: View {
     let state: CharacterState
+    var tint: Color
+    var voiceLevel: Double
+    var onTap: () -> Void
 
-    @State private var blink = false
+    @State private var pose = VectorEyePose.neutral
+    @State private var hovering = false
     @State private var pulse = false
-    @State private var lookOffset: CGFloat = 0
-    @State private var eyeScale: CGFloat = 1.0
 
-    private var eyeColor: Color {
+    private var glow: Color {
         switch state {
-        case .idle: return .cyan
-        case .listening: return .green
-        case .thinking: return .orange
-        case .speaking: return .blue
-        case .happy: return .mint
-        case .alert: return .yellow
-        case .quiet: return .purple
-        case .sleeping: return .indigo
         case .error: return .red
+        case .alert: return .yellow
+        case .thinking: return .orange
+        case .sleeping: return tint.opacity(0.55)
+        default: return tint
         }
-    }
-
-    private var eyeHeight: CGFloat {
-        state == .sleeping ? 10 : (blink ? 8 : 84)
     }
 
     var body: some View {
-        HStack(spacing: 74) {
-            eye
-            eye
+        HStack(spacing: pose.spacing) {
+            vectorEye(side: -1)
+            vectorEye(side: 1)
         }
-        .offset(x: lookOffset)
-        .scaleEffect(eyeScale)
-        .onAppear {
-            configureAnimations()
+        .frame(width: 280, height: 150)
+        .contentShape(Rectangle())
+        .animation(.spring(response: 0.34, dampingFraction: 0.72), value: pose)
+        .onContinuousHover { phase in
+            switch phase {
+            case .active(let point):
+                hovering = true
+                let dx = max(-1, min(1, (point.x - 140) / 140))
+                let dy = max(-1, min(1, (point.y - 75) / 75))
+                var look = pose
+                look.centerX = dx * 22
+                look.centerY = dy * 14
+                look.angle = Double(dx) * 6
+                pose = look
+            case .ended:
+                hovering = false
+                if state != .thinking { pose = expressionPose }
+            }
         }
-        .onChange(of: state) { _, _ in
-            configureAnimations()
+        .onTapGesture {
+            pose = VectorEyePose(scaleX: 1.05, scaleY: 1.12, angle: 0, upperLid: 0.05, spacing: 58)
+            onTap()
+        }
+        .task(id: state) {
+            pulse.toggle()
+            guard state != .sleeping else {
+                pose = VectorEyePose(scaleY: 0.16, spacing: 74)
+                return
+            }
+            if state == .thinking {
+                while !Task.isCancelled {
+                    pose = VectorEyePose.glance(pose.centerX >= 0 ? -18 : 18, -4)
+                    try? await Task.sleep(for: .milliseconds(700))
+                }
+                return
+            }
+            pose = expressionPose
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(Double.random(in: 3.2...6.8)))
+                if Task.isCancelled { continue }
+                if state == .listening || state == .speaking { continue }
+                await playIdle()
+                if !hovering { pose = expressionPose }
+            }
         }
     }
 
+    private var expressionPose: VectorEyePose {
+        switch state {
+        case .happy:
+            return VectorEyePose(scaleX: 1.04, scaleY: 1.08, spacing: 60)
+        case .listening, .speaking:
+            return VectorEyePose(scaleY: 1.1 + voiceLevel * 0.2, spacing: 62)
+        case .alert, .error:
+            return VectorEyePose(scaleX: 1.08, scaleY: 0.62, spacing: 80)
+        default:
+            let heard = CGFloat(min(max(voiceLevel, 0), 1))
+            return VectorEyePose(scaleY: 1 + heard * 0.18, spacing: 74 - heard * 8)
+        }
+    }
 
-    private var eye: some View {
-        Capsule()
+    private func vectorEye(side: CGFloat) -> some View {
+        let width = 82 * pose.scaleX
+        let height = max(8, 84 * pose.scaleY)
+        return Capsule()
             .fill(
                 RadialGradient(
-                    colors: [.white.opacity(0.98), eyeColor, eyeColor.opacity(0.30)],
+                    colors: [.white.opacity(0.98), glow, glow.opacity(0.25)],
                     center: .center,
                     startRadius: 2,
                     endRadius: 70
                 )
             )
-            .frame(width: 82, height: eyeHeight)
-            .shadow(color: eyeColor.opacity(pulse ? 0.95 : 0.45), radius: pulse ? 36 : 18)
-            .animation(.easeInOut(duration: 0.12), value: blink)
-            .animation(.easeInOut(duration: 0.45), value: eyeHeight)
+            .frame(width: width, height: height)
+            .rotationEffect(.degrees(pose.angle * side))
+            .offset(x: pose.centerX, y: pose.centerY)
+            .shadow(color: glow.opacity(0.85), radius: hovering ? 32 : 18 + voiceLevel * 20)
     }
 
-    private func configureAnimations() {
-        blink = false
-        lookOffset = 0
-        eyeScale = 1.0
-        pulse = false
-
-        withAnimation(.easeInOut(duration: pulseDuration).repeatForever(autoreverses: true)) {
-            pulse = true
-        }
-
-        if state == .sleeping {
-            withAnimation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true)) {
-                eyeScale = 0.94
-            }
+    private func playIdle() async {
+        let blink = Int.random(in: 0...4) < 3
+        if blink {
+            await blinkEyes()
             return
         }
-
-        if state == .thinking {
-            withAnimation(.easeInOut(duration: 0.55).repeatForever(autoreverses: true)) {
-                lookOffset = 14
-            }
-        }
-
-        if state == .happy {
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.55).repeatForever(autoreverses: true)) {
-                eyeScale = 1.06
-            }
-        }
-
-        scheduleBlink()
+        guard !hovering else { return }
+        let clips: [VectorEyePose] = [
+            .glance(-20),
+            .glance(20, 2),
+            .glance(CGFloat.random(in: -6...6), -14),
+            VectorEyePose(scaleY: 0.45, spacing: 74),
+            VectorEyePose(scaleX: 1.08, scaleY: 1.12, spacing: 52)
+        ]
+        pose = clips.randomElement() ?? .neutral
+        try? await Task.sleep(for: .milliseconds(700))
     }
 
-    private var pulseDuration: Double {
-        switch state {
-        case .thinking: return 0.55
-        case .listening: return 0.75
-        case .alert: return 0.45
-        case .sleeping: return 2.0
-        default: return 1.5
-        }
-    }
-
-    private func scheduleBlink() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.4) {
-            guard state != .sleeping else { return }
-            blink = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.13) {
-                blink = false
-                scheduleBlink()
-            }
+    private func blinkEyes() async {
+        let open = hovering ? pose : expressionPose
+        let shut = VectorEyePose(
+            centerX: open.centerX,
+            centerY: open.centerY,
+            scaleX: open.scaleX,
+            scaleY: 0.1,
+            angle: open.angle,
+            spacing: open.spacing
+        )
+        pose = shut
+        try? await Task.sleep(for: .milliseconds(120))
+        pose = open
+        if Int.random(in: 0...9) == 0 {
+            try? await Task.sleep(for: .milliseconds(180))
+            pose = shut
+            try? await Task.sleep(for: .milliseconds(110))
+            pose = open
         }
     }
 }
@@ -668,6 +771,7 @@ struct ContentView: View {
     @State private var practiceNoteTask = false
     @State private var caseConversation = HomeCaseConversation()
     @State private var showCaseBrowser = false
+    @State private var speech = HomeSpeech()
     @Query(sort: \PracticeCase.updatedAt, order: .reverse) private var allCases: [PracticeCase]
     
 
@@ -686,7 +790,18 @@ struct ContentView: View {
             ScrollView(.vertical) {
                 VStack(spacing: 22) {
                     header
-                    CharacterView(state: assistant.characterState)
+                    CharacterView(
+                        state: assistant.characterState,
+                        tint: DeskEyeColor.color(named: assistant.eyeColorName),
+                        voiceLevel: speech.isListening ? speech.inputLevel : 0
+                    ) {
+                        assistant.characterState = .listening
+                        if let title = caseConversation.currentTitle {
+                            assistant.responseText = "I'm looking at you. The open practice case is \(title). Say what to add, or ask a code question. A question does not change the note."
+                        } else {
+                            assistant.responseText = "I'm looking at you. No practice case is open, so a sentence will not be saved until you start a note or select a case."
+                        }
+                    }
                         .frame(height: 150)
                         .padding(.top, 16)
                     Text(assistant.greeting)
@@ -709,19 +824,34 @@ struct ContentView: View {
                     .frame(maxWidth: 790, alignment: .leading)
                     .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 16))
 
-                    if let title = caseConversation.currentTitle {
-                        HStack {
-                            Label("Current chat case: \(title)", systemImage: "doc.text")
-                                .font(.caption)
-                            Spacer()
-                            Button("Clear") {
-                                caseConversation.reset()
-                                assistant.responseText = "Current chat case cleared."
+                    if let item = currentChatCase {
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Label("Saving into \(item.title) · \(item.identifier)", systemImage: "doc.text.fill")
+                                    .font(.headline)
+                                Spacer()
+                                Button("Undo") { undoCaseEdit() }
+                                Button("Redo") { redoCaseEdit() }
+                                Button("Clear") {
+                                    caseConversation.reset()
+                                    assistant.responseText = "No practice case is open. The next sentence will not be saved onto a note."
+                                }
                             }
+                            Text("ROS: \(PracticeTemplateStore.exportText(from: item.ros).isEmpty ? "nothing selected" : PracticeTemplateStore.exportText(from: item.ros))")
+                            Text("Exam: \(PracticeTemplateStore.exportText(from: item.pe).isEmpty ? "nothing selected" : PracticeTemplateStore.exportText(from: item.pe))")
+                            let cpt = PracticeCPTStore.load(item.cptDraftData).map(\.code).joined(separator: ", ")
+                            Text("CPT: \(cpt.isEmpty ? "none" : cpt)")
                         }
-                        .foregroundStyle(.white.opacity(0.75))
-                        .frame(maxWidth: 790)
-                        .disabled(isGenerating)
+                        .font(.callout)
+                        .foregroundStyle(.white.opacity(0.86))
+                        .padding(14)
+                        .frame(maxWidth: 790, alignment: .leading)
+                        .background(Color.cyan.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
+                    } else {
+                        Text("No practice case is open. Questions stay in the chat. Start a note before a symptom or CPT code can be saved.")
+                            .font(.callout)
+                            .foregroundStyle(.white.opacity(0.7))
+                            .frame(maxWidth: 790, alignment: .leading)
                     }
 
                     if assistant.isTimerRunning { timerPanel }
@@ -749,6 +879,12 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 900, minHeight: 740)
+        .onChange(of: speech.isListening) { _, listening in
+            assistant.characterState = listening ? .listening : (assistant.isSleeping ? .sleeping : .idle)
+            if listening {
+                assistant.responseText = "Microphone is on. Speak a fictional sentence. The words show above the text box, and the eyes grow when sound comes in."
+            }
+        }
         .onChange(of: assistant.activeProfileID) { _, _ in
             cancelGeneration()
             caseConversation.reset()
@@ -765,8 +901,24 @@ struct ContentView: View {
         }
         .onDisappear {
             cancelGeneration()
+            speech.stop()
             caseConversation.reset()
         }
+    }
+
+    private var currentChatCase: PracticeCase? {
+        guard let id = caseConversation.currentCaseID else { return nil }
+        return profileCases.first { $0.persistentModelID == id }
+    }
+
+    private func undoCaseEdit() {
+        assistant.responseText = HomePracticeNoteController.CaseEditHistory.undo(in: profileCases, modelContext: modelContext)
+        assistant.characterState = .idle
+    }
+
+    private func redoCaseEdit() {
+        assistant.responseText = HomePracticeNoteController.CaseEditHistory.redo(in: profileCases, modelContext: modelContext)
+        assistant.characterState = .idle
     }
 
     private var background: some View {
@@ -796,7 +948,7 @@ struct ContentView: View {
             Spacer()
 
             Picker("Profile", selection: $assistant.selectedUser) {
-                ForEach(DeskProfile.all) { profile in
+                ForEach(assistant.profiles) { profile in
                     Text(profile.displayName)
                         .tag(profile.displayName)
                 }
@@ -833,6 +985,39 @@ struct ContentView: View {
     }
 
     private var commandPanel: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if speech.isListening || !speech.liveText.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(speech.inputLevel > 0.08 ? Color.cyan : Color.white.opacity(0.35))
+                            .frame(width: 10, height: 10)
+                        Text(speech.isListening ? "Listening" : "Last thing heard")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.cyan)
+                        Spacer()
+                        Text(speech.inputLevel > 0.08 ? "Hearing sound" : "Quiet")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.7))
+                    }
+                    Text(speech.liveText.isEmpty ? speech.status : speech.liveText)
+                        .font(.system(size: 22, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                    Capsule()
+                        .fill(Color.cyan.opacity(0.85))
+                        .frame(width: max(12, 280 * speech.inputLevel), height: 6)
+                }
+                .padding(12)
+                .frame(maxWidth: 790, alignment: .leading)
+                .background(Color.cyan.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
+            }
+            commandButtons
+        }
+    }
+
+    private var commandButtons: some View {
         HStack(spacing: 12) {
             TextField(
                 "Start a note, ask a question, or type help",
@@ -843,6 +1028,17 @@ struct ContentView: View {
             .onSubmit {
                 submitHomeInput()
             }
+
+            Button {
+                speech.toggle { spoken in
+                    assistant.commandText = spoken
+                }
+            } label: {
+                Image(systemName: speech.isListening ? "mic.fill" : "mic")
+            }
+            .buttonStyle(.bordered)
+            .tint(speech.isListening ? .red : .cyan)
+            .help(speech.status)
 
             Button {
                 submitHomeInput()
@@ -987,16 +1183,40 @@ struct ContentView: View {
 
     private func generateReply(_ input: String) {
         guard !input.isEmpty else { return }
-        assistant.responseText = """
-        \(ai.unavailableMessage)
+        let id = UUID()
+        let profile = assistant.activeProfileID
+        requestID = id
+        isGenerating = true
+        assistant.characterState = .thinking
+        assistant.responseText = "Asking the on-device model. This does not change a practice case."
+        generationTask = Task { @MainActor in
+            defer {
+                if requestID == id {
+                    requestID = nil
+                    isGenerating = false
+                    generationTask = nil
+                }
+            }
+            do {
+                let answer = try await ai.reply(to: input)
+                try Task.checkCancellation()
+                guard requestID == id, assistant.activeProfileID == profile else { return }
+                assistant.responseText = answer
+                assistant.characterState = .happy
+            } catch is CancellationError {
+                guard requestID == id, assistant.activeProfileID == profile else { return }
+                assistant.responseText = "On-device reply stopped. Nothing was saved to a practice case."
+                assistant.characterState = .idle
+            } catch {
+                guard requestID == id, assistant.activeProfileID == profile else { return }
+                assistant.responseText = """
+                The on-device model could not answer: \(error.localizedDescription)
 
-        Practice notes, ICD-10 lookup, tasks, and dictation still work.
-        Example: “Start a note. Patient is a 60 year old with h/o hypertension and c/o cough.”
-        Or: “What is the code for cough?”
-
-        Your message was: \(input)
-        """
-        assistant.characterState = .idle
+                Note, ICD-10, and CPT commands still work. Nothing was saved to a practice case.
+                """
+                assistant.characterState = .error
+            }
+        }
     }
 
     private func searchHomeICD(_ term: String) {
@@ -1027,7 +1247,10 @@ struct ContentView: View {
                     return
                 }
 
-                assistant.responseText = answer
+                let caseNote = caseConversation.currentTitle.map {
+                    "\n\nThis search did not change the open case: \($0)."
+                } ?? "\n\nNo practice case was changed."
+                assistant.responseText = answer + caseNote
                 assistant.characterState = .idle
             } catch is CancellationError {
                 if requestID == id, assistant.activeProfileID == profile {
@@ -1055,6 +1278,10 @@ struct ContentView: View {
         switch action {
         case .explainCPT:
             assistant.responseText = PracticeNoteChatRouter.cptHelp
+            assistant.characterState = .idle
+            return
+        case .lookupCPT(let term):
+            assistant.responseText = PracticeCPTLibrary.lookupReply(for: term)
             assistant.characterState = .idle
             return
         case .explainICD:

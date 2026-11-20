@@ -12,6 +12,7 @@ struct PracticeTemplateEditor: View {
     @State private var editingID: String?
     @State private var lastTapID: String?
     @State private var lastTapTime: Date?
+    @State private var openSystems: Set<String> = []
 
     private var document: PracticeTemplateDocument {
         if let decoded = PracticeTemplateStore.decode(stored) {
@@ -38,9 +39,17 @@ struct PracticeTemplateEditor: View {
                     .buttonStyle(.borderless)
             }
 
-            Text("Click a button to select it. Double-click a button to type a note on it. All Normal and Clear are optional.")
+            Text("Sections start closed so the note is shorter. Open one to click buttons. Double-click a button to type a note.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            HStack {
+                Button("Expand sections") {
+                    openSystems = Set(PracticeTemplateLibrary.systems(kind))
+                }
+                Button("Collapse sections") { openSystems.removeAll() }
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
 
             Text(previewLine)
                 .font(.callout)
@@ -64,8 +73,12 @@ struct PracticeTemplateEditor: View {
             }
 
             ForEach(PracticeTemplateLibrary.systems(kind), id: \.self) { system in
-                systemBlock(system)
-                Divider()
+                DisclosureGroup(isExpanded: expanded(system)) {
+                    systemBlock(system)
+                } label: {
+                    Text(systemTitle(system))
+                        .font(.subheadline.weight(.semibold))
+                }
             }
 
             if legacyText.isEmpty {
@@ -75,6 +88,22 @@ struct PracticeTemplateEditor: View {
                     .textFieldStyle(.roundedBorder)
             }
         }
+    }
+
+    private func expanded(_ system: String) -> Binding<Bool> {
+        Binding(
+            get: { openSystems.contains(system) },
+            set: { isOpen in
+                if isOpen { openSystems.insert(system) } else { openSystems.remove(system) }
+            }
+        )
+    }
+
+    private func systemTitle(_ system: String) -> String {
+        let count = document.selections.filter {
+            PracticeTemplateLibrary.finding(id: $0.id)?.system == system
+        }.count
+        return count == 0 ? system : "\(system) (\(count))"
     }
 
     private func systemBlock(_ system: String) -> some View {

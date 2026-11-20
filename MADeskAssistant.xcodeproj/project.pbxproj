@@ -304,6 +304,8 @@
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "MA Desk uses the microphone so you can dictate a fictional practice note. Do not dictate real patient information.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "MA Desk turns speech into text for fictional practice notes. On-device recognition is used when this Mac supports it.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -345,6 +347,8 @@
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "MA Desk uses the microphone so you can dictate a fictional practice note. Do not dictate real patient information.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "MA Desk turns speech into text for fictional practice notes. On-device recognition is used when this Mac supports it.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",

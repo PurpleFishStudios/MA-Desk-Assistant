@@ -62,6 +62,9 @@ struct AppShellView: View {
         case .icd10:
             ICD10ReferenceView()
 
+        case .cpt:
+            CPTReferenceView()
+
         case .dictation:
             DictationTestView(profileName: assistant.selectedUser)
 
@@ -70,11 +73,7 @@ struct AppShellView: View {
 
 
         case .settings:
-            PlaceholderScreen(
-                title: "Settings",
-                systemImage: "gearshape.fill",
-                message: "Profile, notification, personality, and privacy settings will go here."
-            )
+            SettingsClinicView(assistant: assistant)
         }
     }
 }

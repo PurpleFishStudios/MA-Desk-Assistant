@@ -2,23 +2,80 @@
 //  LocalAIService.swift
 //  MADeskAssistant
 //
-//  The local model packages were removed so this project can build on
-//  Xcode 27.2. Their macro libraries were compiled with Swift 6.4.0 and
-//  this Xcode uses Swift 6.4.2.
+//  Uses the on-device Apple language model. Questions stay on this Mac.
 //
 
 import Foundation
+import FoundationModels
 import Observation
 
 @MainActor
 @Observable
 final class LocalAIService {
     var isLoading = false
-    var loadingError: String?
+    private(set) var statusMessage = "Checking the on-device model."
+    private var session: LanguageModelSession?
+    private let model = SystemLanguageModel.default
 
-    let unavailableMessage = """
-    Local AI is turned off in this build. The model packages were removed because their macro libraries do not match Xcode 27.2.
+    var isAvailable: Bool {
+        if case .available = model.availability { return true }
+        return false
+    }
+
+    func prepareIfNeeded() async {
+        guard session == nil else { return }
+        isLoading = true
+        defer { isLoading = false }
+        switch model.availability {
+        case .available:
+            session = LanguageModelSession(model: model, instructions: Self.instructions)
+            session?.prewarm()
+            statusMessage = "On-device Apple model is ready. It answers questions that are not desk commands. Text stays on this Mac."
+        case .unavailable(let reason):
+            session = nil
+            statusMessage = Self.message(for: reason)
+        }
+    }
+
+    func reply(to input: String) async throws -> String {
+        await prepareIfNeeded()
+        guard let session else {
+            return """
+            \(statusMessage)
+
+            Note, ICD-10, and CPT commands still work. Nothing was saved to a practice case.
+            """
+        }
+        let response = try await session.respond(to: input)
+        let text = response.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.isEmpty {
+            return "The on-device model returned an empty reply. Nothing was saved to a practice case."
+        }
+        return """
+        \(text)
+
+        Practice draft from the on-device model. Not a diagnosis or a billing decision. Nothing was saved to a practice case.
+        """
+    }
+
+    private static let instructions = """
+    You are MA Desk, a desk assistant for fictional practice cases.
+    Answer in a few short sentences.
+    You cannot see saved records, and you cannot change a note, choose a diagnosis, or choose a billing code.
+    If the person wants to edit a note, tell them to start a note or describe the symptom while a case is open.
+    Treat every clinical detail as fictional practice material, not validated medical guidance.
     """
 
-    func prepareIfNeeded() async {}
+    private static func message(for reason: SystemLanguageModel.Availability.UnavailableReason) -> String {
+        switch reason {
+        case .appleIntelligenceNotEnabled:
+            return "Apple Intelligence is turned off, so the on-device model cannot answer yet. Turn it on in System Settings, then reopen Local AI."
+        case .deviceNotEligible:
+            return "This Mac cannot run the on-device Apple model. Note, ICD-10, and CPT commands still work."
+        case .modelNotReady:
+            return "The on-device model is not ready yet. Wait for Apple Intelligence to finish downloading, then reopen Local AI."
+        @unknown default:
+            return "The on-device model is unavailable. Note, ICD-10, and CPT commands still work."
+        }
+    }
 }

@@ -6,6 +6,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     case timers
     case plants
     case icd10
+    case cpt
     case localAI
     case dictation
     case settings
@@ -20,6 +21,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .timers: return "Timers"
         case .plants: return "Plants"
         case .icd10: return "ICD-10 Reference"
+        case .cpt: return "CPT Reference"
         case .dictation: return "Dictation Test"
         case .localAI: return "Local AI"
         case .settings: return "Settings"
@@ -34,6 +36,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .timers: return "timer"
         case .plants: return "leaf.fill"
         case .icd10: return "cross.case.fill"
+        case .cpt: return "list.bullet.rectangle"
         case .dictation: return "waveform"
         case .localAI: return "brain.head.profile"
         case .settings: return "gearshape.fill"

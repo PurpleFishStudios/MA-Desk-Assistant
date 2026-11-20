@@ -40,6 +40,8 @@ enum HomePracticeNoteController {
             )
         case .explainCPT:
             return PracticeNoteChatRouter.cptHelp
+        case .lookupCPT(let term):
+            return PracticeCPTLibrary.lookupReply(for: term)
         case .explainICD:
             return PracticeNoteChatRouter.icdHelp
         case .removeFinding(let section, let phrase):
@@ -56,6 +58,26 @@ enum HomePracticeNoteController {
                 if section == .ros { item.ros = result.text } else { item.pe = result.text }
                 return Change(
                     message: "Removed “\(phrase)” from the \(sectionName(section)) on “\(item.title)”. Review it in Practice Cases before you submit.",
+                    changed: true
+                )
+            }
+        case .setFinding(let id, let detail):
+            return edit(cases: cases, conversation: conversation, modelContext: modelContext) { item in
+                guard let finding = PracticeTemplateLibrary.finding(id: id) else {
+                    return Change(message: "I could not match that to a ROS or exam button. Nothing was changed.", changed: false)
+                }
+                let original = finding.kind == .ros ? item.ros : item.pe
+                let updated = PracticeTemplateStore.select(id: id, detail: detail, in: original)
+                guard updated != original else {
+                    return Change(message: "“\(finding.label)” is already selected on “\(item.title)”.", changed: false)
+                }
+                if finding.kind == .ros { item.ros = updated } else { item.pe = updated }
+                let shown = detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ? finding.label
+                    : "\(finding.label) (\(detail))"
+                let place = finding.kind == .ros ? "ROS" : "physical exam"
+                return Change(
+                    message: "Selected “\(shown)” on the \(place) for “\(item.title)”. Open Practice Cases to see the button. This is a practice draft, not an observed exam.",
                     changed: true
                 )
             }
@@ -275,8 +297,10 @@ enum HomePracticeNoteController {
             Say “start a note” with the fictional story, or select a saved case by its title. Then you can edit the ROS, exam, ICD-10-CM references, and CPT drafts in this chat.
             """
         }
+        let before = CaseEditHistory.Snapshot(item)
         let result = change(item)
         guard result.changed else { return result.message }
+        CaseEditHistory.record(before)
         item.updatedAt = .now
         do {
             try modelContext.save()
@@ -286,6 +310,71 @@ enum HomePracticeNoteController {
         }
         return result.message
     }
+
+enum CaseEditHistory {
+    struct Snapshot {
+        var id: PersistentIdentifier
+        var ros: String
+        var pe: String
+        var plan: String
+        var cpt: String
+
+        init(_ item: PracticeCase) {
+            id = item.persistentModelID
+            ros = item.ros
+            pe = item.pe
+            plan = item.plan
+            cpt = item.cptDraftData
+        }
+
+        func apply(to item: PracticeCase) {
+            item.ros = ros
+            item.pe = pe
+            item.plan = plan
+            item.cptDraftData = cpt
+            item.updatedAt = .now
+        }
+    }
+
+    private static var undoStack: [Snapshot] = []
+    private static var redoStack: [Snapshot] = []
+
+    static func record(_ snapshot: Snapshot) {
+        undoStack.append(snapshot)
+        if undoStack.count > 40 { undoStack.removeFirst() }
+        redoStack.removeAll()
+    }
+
+    static func undo(in cases: [PracticeCase], modelContext: ModelContext) -> String {
+        step(from: &undoStack, to: &redoStack, in: cases, modelContext: modelContext, name: "Undo")
+    }
+
+    static func redo(in cases: [PracticeCase], modelContext: ModelContext) -> String {
+        step(from: &redoStack, to: &undoStack, in: cases, modelContext: modelContext, name: "Redo")
+    }
+
+    private static func step(
+        from source: inout [Snapshot],
+        to destination: inout [Snapshot],
+        in cases: [PracticeCase],
+        modelContext: ModelContext,
+        name: String
+    ) -> String {
+        guard let snapshot = source.popLast() else { return "Nothing to \(name.lowercased())." }
+        guard let item = cases.first(where: { $0.persistentModelID == snapshot.id }) else {
+            return "That practice case is no longer open."
+        }
+        destination.append(Snapshot(item))
+        snapshot.apply(to: item)
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            return "\(name) was not saved: \(error.localizedDescription)"
+        }
+        return "\(name) restored \(item.title). Press Command-Z to undo and Command-Shift-Z to redo chat edits to a practice note."
+    }
+}
 
     private static func upsertCPT(_ stated: StatedCPT, on item: PracticeCase) -> Bool {
         let code = stated.code.trimmingCharacters(in: .whitespacesAndNewlines)

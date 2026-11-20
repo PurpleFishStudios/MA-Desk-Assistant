@@ -13,6 +13,7 @@ final class HomeICDLookup {
         text = text.replacingOccurrences(of: "’", with: "'")
         let patterns = [
             #"^(?:hey[,\s]+)?(?:please\s+)?what(?:'s| is) the (?:icd[- ]?10(?:-cm)? )?codes? for\s*(.*)$"#,
+            #"^(?:hey[,\s]+)?(?:please\s+)?what(?:'s| is)\s+(?:the\s+)?(?:an?\s+)?icd[- ]?10(?:-cm)?(?:\s+codes?)?\s+(?:for\s+)?(.*)$"#,
             #"^(?:please\s+)?(?:find|search|look up|lookup)(?: the)? (?:icd[- ]?10(?:-cm)? )?codes?(?: for)?\s*(.*)$"#,
             #"^(?:icd[- ]?10(?:-cm)?)(?: codes?)?(?: for)?\s*(.*)$"#,
             #"^codes? for\s*(.*)$"#

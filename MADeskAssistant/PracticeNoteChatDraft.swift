@@ -24,11 +24,13 @@ enum PracticeNoteChatAction: Equatable {
     case start(PracticeNoteNarrative)
     case removeFinding(PracticeNoteSection, String)
     case addFinding(PracticeNoteSection, String)
+    case setFinding(id: String, detail: String)
     case addICD(String)
     case removeICD(String)
     case addCPT(StatedCPT)
     case removeCPT(String)
     case explainCPT
+    case lookupCPT(String)
     case explainICD
 }
 
@@ -168,6 +170,9 @@ enum PracticeNoteChatRouter {
         if let edit = findingEdit(text, source: source) {
             return edit
         }
+        if let term = cptLookupTerm(in: text, source: source) {
+            return .lookupCPT(term)
+        }
         if text.contains("cpt"), text.hasPrefix("what") || text.hasPrefix("explain") || text.contains("what is") || text.contains("what's") {
             return .explainCPT
         }
@@ -175,7 +180,76 @@ enum PracticeNoteChatRouter {
            !text.contains(" for ") {
             return .explainICD
         }
+        if let plain = plainFindingEdit(in: text, source: source) {
+            return plain
+        }
         return nil
+    }
+
+    private static func plainFindingEdit(in text: String, source: String) -> PracticeNoteChatAction? {
+        if text.contains("?") || text.hasPrefix("what") || text.hasPrefix("why") || text.hasPrefix("how") || text.hasPrefix("when") || text.hasPrefix("who") {
+            return nil
+        }
+        let removing = text.range(of: #"\b(remove|delete|take off|take out|scratch|drop)\b"#, options: .regularExpression) != nil
+        let editing = removing || text.range(of: #"\b(add|has|have|had|having|complains|complaining|complained|reports|reporting|reported|shows|showing|noticed|c/o)\b"#, options: .regularExpression) != nil
+        guard editing else { return nil }
+
+        let preferPE = text.range(of: #"\b(exam|examination|physical|lungs)\b"#, options: .regularExpression) != nil
+            && text.range(of: #"\bros\b|review of systems"#, options: .regularExpression) == nil
+        guard let best = bestFinding(in: text, preferPE: preferPE) else { return nil }
+
+        let section: PracticeNoteSection = best.finding.kind == .pe ? .pe : .ros
+        if removing {
+            return .removeFinding(section, best.finding.label)
+        }
+
+        let triggers = best.finding.triggers.isEmpty ? [best.finding.label] : best.finding.triggers
+        let denied = !best.finding.isNormal && !PracticeNoteTemplate.isAffirmed(triggers, in: text)
+        if denied, let normal = PracticeTemplateLibrary.finding(id: best.finding.id + ".normal") {
+            return .setFinding(id: normal.id, detail: "")
+        }
+        if denied {
+            return .removeFinding(section, best.finding.label)
+        }
+        let detailSource = source.count == text.count ? source : text
+        return .setFinding(id: best.finding.id, detail: siteDetail(after: best.range, in: detailSource))
+    }
+
+    private struct FindingHit {
+        var finding: PracticeFinding
+        var range: Range<String.Index>
+        var length: Int
+    }
+
+    private static func bestFinding(in text: String, preferPE: Bool) -> FindingHit? {
+        let pool = PracticeTemplateLibrary.findings.filter { preferPE ? $0.kind == .pe : true }
+        var hits: [FindingHit] = []
+        for finding in pool {
+            let phrases = ([finding.label] + finding.triggers).sorted { $0.count > $1.count }
+            for phrase in phrases where phrase.count >= 3 {
+                let pattern = "\\b\(NSRegularExpression.escapedPattern(for: phrase))\\b"
+                guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+                      let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..<text.endIndex, in: text)),
+                      let range = Range(match.range, in: text) else { continue }
+                hits.append(FindingHit(finding: finding, range: range, length: phrase.count))
+                break
+            }
+        }
+        return hits.max { $0.length < $1.length }
+    }
+
+    private static func siteDetail(after range: Range<String.Index>, in text: String) -> String {
+        var rest = String(text[range.upperBound...])
+        if let stop = rest.range(of: " and ") ?? rest.range(of: ".") ?? rest.range(of: ",") {
+            rest = String(rest[..<stop.lowerBound])
+        }
+        rest = rest.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
+        for prefix in ["in the ", "on the ", "to the ", "in ", "on ", "at the ", "at "] where rest.hasPrefix(prefix) {
+            rest = String(rest.dropFirst(prefix.count))
+        }
+        rest = rest.trimmingCharacters(in: .whitespacesAndNewlines)
+        if rest.count < 2 || rest.count > 40 { return "" }
+        return rest
     }
 
     static func narrative(from remainder: String) -> PracticeNoteNarrative {
@@ -288,6 +362,20 @@ enum PracticeNoteChatRouter {
             cursor = marker.valueStart
         }
         return kept
+    }
+
+    private static func cptLookupTerm(in text: String, source: String) -> String? {
+        let patterns = [
+            #"^(?:what(?:'s| is)|find|search|look up)\s+(?:the\s+)?cpt(?:\s+code)?\s+(?:for\s+)?(.+)$"#,
+            #"^cpt(?:\s+code)?\s+(?:for\s+)?(.+)$"#
+        ]
+        for pattern in patterns {
+            guard let term = firstCapture(pattern, in: text, source: source) else { continue }
+            let cleaned = term.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
+            if cleaned.isEmpty || cleaned == "code" || cleaned == "a code" { return nil }
+            return cleaned
+        }
+        return nil
     }
 
     private static func stripLead(_ text: String) -> String {
