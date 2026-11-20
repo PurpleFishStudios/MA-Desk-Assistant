@@ -6,8 +6,19 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		DB07236A306CCB9B00206846 /* ICD10CM in Frameworks */ = {isa = PBXBuildFile; productRef = DB072369306CCB9B00206846 /* ICD10CM */; };
+		DB07236C306CCCB000206846 /* CREDITS.md in Resources */ = {isa = PBXBuildFile; fileRef = DB07236B306CCCB000206846 /* CREDITS.md */; };
+		DB275B3C306E2F8600CA78AB /* MA_Desk_Fictional_Case_Tester_Script.md in Resources */ = {isa = PBXBuildFile; fileRef = DB275B3B306E2F8600CA78AB /* MA_Desk_Fictional_Case_Tester_Script.md */; };
+		DB5B5EA5308F19E8008967EE /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = DB5B5EA4308F19E8008967EE /* WhisperKit */; };
+		DB5B5EED308FB686008967EE /* notes.md in Resources */ = {isa = PBXBuildFile; fileRef = DB5B5EEC308FB680008967EE /* notes.md */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
+		DB07236B306CCCB000206846 /* CREDITS.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CREDITS.md; sourceTree = "<group>"; };
 		DB1146D03043968B00686D27 /* MADeskAssistant.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MADeskAssistant.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		DB275B3B306E2F8600CA78AB /* MA_Desk_Fictional_Case_Tester_Script.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = MA_Desk_Fictional_Case_Tester_Script.md; sourceTree = "<group>"; };
+		DB5B5EEC308FB680008967EE /* notes.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = notes.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -23,6 +34,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DB5B5EA5308F19E8008967EE /* WhisperKit in Frameworks */,
+				DB07236A306CCB9B00206846 /* ICD10CM in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -32,7 +45,11 @@
 		DB1146C73043968B00686D27 = {
 			isa = PBXGroup;
 			children = (
+				DB275B3B306E2F8600CA78AB /* MA_Desk_Fictional_Case_Tester_Script.md */,
+				DB5B5EEC308FB680008967EE /* notes.md */,
+				DB07236B306CCCB000206846 /* CREDITS.md */,
 				DB1146D23043968B00686D27 /* MADeskAssistant */,
+				DB8911F4308DD12500BFE96A /* Frameworks */,
 				DB1146D13043968B00686D27 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -43,6 +60,13 @@
 				DB1146D03043968B00686D27 /* MADeskAssistant.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		DB8911F4308DD12500BFE96A /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -65,6 +89,8 @@
 			);
 			name = MADeskAssistant;
 			packageProductDependencies = (
+				DB072369306CCB9B00206846 /* ICD10CM */,
+				DB5B5EA4308F19E8008967EE /* WhisperKit */,
 			);
 			productName = MADeskAssistant;
 			productReference = DB1146D03043968B00686D27 /* MADeskAssistant.app */;
@@ -78,7 +104,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2660;
-				LastUpgradeCheck = 2660;
+				LastUpgradeCheck = 2700;
 				TargetAttributes = {
 					DB1146CF3043968B00686D27 = {
 						CreatedOnToolsVersion = 26.6;
@@ -94,6 +120,10 @@
 			);
 			mainGroup = DB1146C73043968B00686D27;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				DB072368306CCB9B00206846 /* XCLocalSwiftPackageReference "../../backup projects/ICD_10_CM_Oct_26_RAG" */,
+				DB13A9CD308DEFD00031E7CD /* XCRemoteSwiftPackageReference "argmax-oss-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = DB1146D13043968B00686D27 /* Products */;
 			projectDirPath = "";
@@ -109,6 +139,9 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DB5B5EED308FB686008967EE /* notes.md in Resources */,
+				DB07236C306CCCB000206846 /* CREDITS.md in Resources */,
+				DB275B3C306E2F8600CA78AB /* MA_Desk_Fictional_Case_Tester_Script.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -159,6 +192,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -183,6 +217,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -222,6 +257,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -239,6 +275,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 			};
 			name = Release;
@@ -251,9 +288,20 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
 				ENABLE_APP_SANDBOX = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SELECTED_FILES = readonly;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
+				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -281,9 +329,20 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
 				ENABLE_APP_SANDBOX = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SELECTED_FILES = readonly;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
+				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -325,6 +384,36 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		DB072368306CCB9B00206846 /* XCLocalSwiftPackageReference "../../backup projects/ICD_10_CM_Oct_26_RAG" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "../../backup projects/ICD_10_CM_Oct_26_RAG";
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		DB13A9CD308DEFD00031E7CD /* XCRemoteSwiftPackageReference "argmax-oss-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/argmaxinc/argmax-oss-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		DB072369306CCB9B00206846 /* ICD10CM */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ICD10CM;
+		};
+		DB5B5EA4308F19E8008967EE /* WhisperKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DB13A9CD308DEFD00031E7CD /* XCRemoteSwiftPackageReference "argmax-oss-swift" */;
+			productName = WhisperKit;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = DB1146C83043968B00686D27 /* Project object */;
 }
